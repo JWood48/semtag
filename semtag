@@ -3,7 +3,8 @@
 PROG=semtag
 PROG_VERSION="v0.1.2"
 
-SEMVER_REGEX="^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$"
+SEMVER_REGEX_BASE="(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$"
+
 IDENTIFIER_REGEX="^\-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$"
 NUMERIC_REGEX='^[0-9]+$'
 
@@ -11,9 +12,6 @@ NUMERIC_REGEX='^[0-9]+$'
 MAX_BRANCH_LENGTH=50
 
 # Global variables
-FIRST_VERSION="v0.0.0"
-finalversion=$FIRST_VERSION
-lastversion=$FIRST_VERSION
 hasversiontag="false"
 scope="patch"
 displayonly="false"
@@ -70,33 +68,40 @@ ACTION="$1"
 shift
 
 # We get the parameters
-while getopts "v:s:ofp" opt; do
+while getopts "v:s:p:of" opt; do
   case $opt in
-    v)
-      forcedversion="$OPTARG"
-      ;;
-    s)
-      scope="$OPTARG"
-      ;;
-    o)
-      displayonly="true"
-      ;;
-    f)
-      forcetag="true"
-      ;;
-    p)
-      prefix=""
-      ;;
-    \?)
-      echo "Invalid option: -$OPTARG" >&2
-      exit 1
-      ;;
-    :)
-      echo "Option -$OPTARG requires an argument." >&2
-      exit 1
-      ;;
+  v)
+    forcedversion="$OPTARG"
+    ;;
+  s)
+    scope="$OPTARG"
+    ;;
+  o)
+    displayonly="true"
+    ;;
+  f)
+    forcetag="true"
+    ;;
+  p)
+    prefix="$OPTARG"
+    ;;
+  \?)
+    echo "Invalid option: -$OPTARG" >&2
+    exit 1
+    ;;
+  :)
+    echo "Option -$OPTARG requires an argument." >&2
+    exit 1
+    ;;
   esac
 done
+
+## Init regular expression with correct prefix
+SEMVER_REGEX="^$prefix$SEMVER_REGEX_BASE"
+## Init versions with correct prefix
+FIRST_VERSION="${prefix}0.0.0"
+finalversion=$FIRST_VERSION
+lastversion=$FIRST_VERSION
 
 # Try to programmatically fetch the default branch. Go by the first remote HEAD found, otherwise default to `master`.
 # $1 The variable to store the result
@@ -128,7 +133,7 @@ function get_default_branch {
 function explode_version {
   local __version=$1
   local __result=$2
-  if [[ $__version =~ $SEMVER_REGEX ]] ; then
+  if [[ $__version =~ $SEMVER_REGEX ]]; then
     local __major=${BASH_REMATCH[1]}
     local __minor=${BASH_REMATCH[2]}
     local __patch=${BASH_REMATCH[3]}
@@ -156,16 +161,16 @@ function compare_versions {
     local __numberfirst=${__first[$i]}
     local __numbersecond=${__second[$i]}
     case $(($__numberfirst - $__numbersecond)) in
-      0)
-        ;;
-      -[0-9]*)
-        eval "$lv=-1"
-        return 0
-        ;;
-      [0-9]*)
-        eval "$lv=1"
-        return 0
-        ;;
+    0) ;;
+
+    -[0-9]*)
+      eval "$lv=-1"
+      return 0
+      ;;
+    [0-9]*)
+      eval "$lv=1"
+      return 0
+      ;;
     esac
   done
 
@@ -176,7 +181,6 @@ function compare_versions {
   eval "$lv=$compareresult"
 }
 
-
 # Returns the number comparison
 # $1 The first number to compare
 # $2 The second number to compare
@@ -186,9 +190,9 @@ function compare_numeric {
   local __second=$2
   local __result=$3
 
-  if (( "$__first" < "$__second" )) ; then
+  if (("$__first" < "$__second")); then
     eval "$__result=-1"
-  elif (( "$__first" > "$__second" )) ; then
+  elif (("$__first" > "$__second")); then
     eval "$__result=1"
   else
     eval "$__result=0"
@@ -204,9 +208,9 @@ function compare_alphanumeric {
   local __second=$2
   local __result=$3
 
-  if [[ "$__first" < "$__second" ]] ; then
+  if [[ "$__first" < "$__second" ]]; then
     eval "$__result=-1"
-  elif [[ "$__first" > "$__second" ]] ; then
+  elif [[ "$__first" > "$__second" ]]; then
     eval "$__result=1"
   else
     eval "$__result=0"
@@ -225,15 +229,15 @@ function get_latest_of_two {
 
   compare_versions $__first $__second __result
   case $__result in
-    0)
-      eval "$__latest=$__second"
-      ;;
-    -1)
-      eval "$__latest=$__second"
-      ;;
-    1)
-      eval "$__latest=$__first"
-      ;;
+  0)
+    eval "$__latest=$__second"
+    ;;
+  -1)
+    eval "$__latest=$__second"
+    ;;
+  1)
+    eval "$__latest=$__first"
+    ;;
   esac
 }
 
@@ -247,12 +251,11 @@ function compare_identifier_part {
   local __result=$3
   local compareresult
 
-  if [[ "$__first" =~ $NUMERIC_REGEX ]] && [[ "$__second" =~ $NUMERIC_REGEX ]] ; then
+  if [[ "$__first" =~ $NUMERIC_REGEX ]] && [[ "$__second" =~ $NUMERIC_REGEX ]]; then
     compare_numeric "$__first" "$__second" compareresult
     eval "$__result=$compareresult"
     return 0
   fi
-
 
   compare_alphanumeric "$__first" "$__second" compareresult
   eval "$__result=$compareresult"
@@ -274,16 +277,16 @@ function compare_identifiers {
 
     firstsize=${#explodedidentifierfirst[@]}
     secondsize=${#explodedidentifiersecond[@]}
-    minlength=$(( $firstsize<$secondsize ? $firstsize : $secondsize ))
-    for (( i = 0 ; i < $minlength ; i++ )); do
+    minlength=$(($firstsize < $secondsize ? $firstsize : $secondsize))
+    for ((i = 0; i < $minlength; i++)); do
       compare_identifier_part "${explodedidentifierfirst[$i]}" "${explodedidentifiersecond[$i]}" partresult
       case $partresult in
-        0)
-          ;;
-        *)
-          eval "$__result=$partresult"
-          return 0
-          ;;
+      0) ;;
+
+      *)
+        eval "$__result=$partresult"
+        return 0
+        ;;
       esac
     done
     compare_numeric $firstsize $secondsize arraylengths
@@ -306,8 +309,8 @@ function compare_identifiers {
 function explode_identifier {
   local __identifier=$1
   local __result=$2
-  if [[ $__identifier =~ $IDENTIFIER_REGEX ]] ; then
-    IFS='-.' read -ra identifierparts <<< $__identifier
+  if [[ $__identifier =~ $IDENTIFIER_REGEX ]]; then
+    IFS='-.' read -ra identifierparts <<<$__identifier
     eval "$__result=( ${identifierparts[@]} )"
   else
     eval "$__result="
@@ -322,41 +325,40 @@ function get_latest {
   local __tagsnumber=${#__taglist[@]}
   local __current
   case $__tagsnumber in
-    0)
+  0)
+    finalversion=$FIRST_VERSION
+    lastversion=$FIRST_VERSION
+    ;;
+  1)
+    __current=${__taglist[0]}
+    explode_version $__current ver
+    if [ -n "$ver" ]; then
+      if [ -n "${ver[3]}" ]; then
+        finalversion=$FIRST_VERSION
+      else
+        finalversion=$__current
+      fi
+      lastversion=$__current
+    else
       finalversion=$FIRST_VERSION
       lastversion=$FIRST_VERSION
-      ;;
-    1)
-      __current=${__taglist[0]}
-      explode_version $__current ver
+    fi
+    ;;
+  *)
+    local __lastpos=$(($__tagsnumber - 1))
+    for i in $(seq 0 $__lastpos); do
+      __current=${__taglist[i]}
+      explode_version ${__taglist[i]} ver
       if [ -n "$ver" ]; then
-        if [ -n "${ver[3]}" ]; then
-          finalversion=$FIRST_VERSION
+        if [ -z "${ver[3]}" ]; then
+          get_latest_of_two $finalversion $__current finalversion
+          get_latest_of_two $lastversion $finalversion lastversion
         else
-          finalversion=$__current
+          get_latest_of_two $lastversion $__current lastversion
         fi
-        lastversion=$__current
-      else
-        finalversion=$FIRST_VERSION
-        lastversion=$FIRST_VERSION
       fi
-      ;;
-    *)
-      local __lastpos=$(($__tagsnumber-1))
-      for i in $(seq 0 $__lastpos)
-      do
-        __current=${__taglist[i]}
-        explode_version ${__taglist[i]} ver
-        if [ -n "$ver" ]; then
-          if [ -z "${ver[3]}" ]; then
-            get_latest_of_two $finalversion $__current finalversion
-            get_latest_of_two $lastversion $finalversion lastversion
-          else
-            get_latest_of_two $lastversion $__current lastversion
-          fi
-        fi
-      done
-      ;;
+    done
+    ;;
   esac
 
   if git rev-parse -q --verify "refs/tags/$lastversion" >/dev/null; then
@@ -377,17 +379,17 @@ function get_next_version {
   local __result=$3
   explode_version $__fromversion __exploded
   case $__scope in
-    major)
-      __exploded[0]=$((${__exploded[0]}+1))
-      __exploded[1]=0
-      __exploded[2]=0
+  major)
+    __exploded[0]=$((${__exploded[0]} + 1))
+    __exploded[1]=0
+    __exploded[2]=0
     ;;
-    minor)
-      __exploded[1]=$((${__exploded[1]}+1))
-      __exploded[2]=0
+  minor)
+    __exploded[1]=$((${__exploded[1]} + 1))
+    __exploded[2]=0
     ;;
-    patch)
-      __exploded[2]=$((${__exploded[2]}+1))
+  patch)
+    __exploded[2]=$((${__exploded[2]} + 1))
     ;;
   esac
 
@@ -414,7 +416,7 @@ function bump_version {
       local __nextid="$identifier.1"
       if [ "$identifier" == "${__idlast[0]}" ]; then
         # We target the same identifier as the last so we increase one
-        __nextid="$identifier.$(( ${__idlast[1]}+1 ))"
+        __nextid="$identifier.$((${__idlast[1]} + 1))"
         __candidatefromlast="$__candidatefromlast-$__nextid"
       else
         # Different identifiers, we make sure we are assigning a higher identifier, if not, we increase the version
@@ -441,15 +443,15 @@ function bump_version {
   local __result
   compare_versions $__candidatefromlast $__candidatefromfinal __result
   case $__result in
-    0)
-      __resultversion=$__candidatefromlast
-      ;;
-    -1)
-      __resultversion="$__candidatefromfinal"
-      ;;
-    1)
-      __resultversion=$__candidatefromlast
-      ;;
+  0)
+    __resultversion=$__candidatefromlast
+    ;;
+  -1)
+    __resultversion="$__candidatefromfinal"
+    ;;
+  1)
+    __resultversion=$__candidatefromlast
+    ;;
   esac
 
   eval "$1=$__resultversion"
@@ -461,7 +463,7 @@ function increase_version {
   if [ -z $forcedversion ]; then
     bump_version __version
   else
-    if [[ $forcedversion =~ $SEMVER_REGEX ]] ; then
+    if [[ $forcedversion =~ $SEMVER_REGEX ]]; then
       compare_versions $forcedversion $lastversion __result
       if [ $__result -le 0 ]; then
         echo "Version can't be lower than last version: $lastversion"
@@ -519,7 +521,7 @@ $__commitlist"
       local __remotes=$(git remote)
       if [[ -n $__remotes ]]; then
         for __remote in $__remotes; do
-          git push $__remote $__version > /dev/null
+          git push $__remote $__version >/dev/null
           if [ $? -eq 0 ]; then
             echo "$__version pushed to $__remote"
           else
@@ -575,13 +577,12 @@ function get_changed_lines {
 
   local __total_added=0
   local __total_deleted=0
-  for i in "${__changes_array[@]}"
-  do
-    if [[ $i =~ $__diff_regex ]] ; then
+  for i in "${__changes_array[@]}"; do
+    if [[ $i =~ $__diff_regex ]]; then
       local __added=${BASH_REMATCH[1]}
       local __deleted=${BASH_REMATCH[2]}
-      __total_added=$(( $__total_added+$__added ))
-      __total_deleted=$(( $__total_deleted+$__deleted ))
+      __total_added=$(($__total_added + $__added))
+      __total_deleted=$(($__total_deleted + $__deleted))
     fi
   done
   eval "$2=( $__total_added $__total_deleted )"
@@ -598,7 +599,7 @@ function get_scope_auto {
 
   local __percentage=0
   if [ "$__total" != "0" ]; then
-    local __percentage=$(( 100*$__since/$__total ))
+    local __percentage=$((100 * $__since / $__total))
     if [ $__percentage -gt "10" ]; then
       __scope="minor"
     else
@@ -615,16 +616,14 @@ function get_scope_auto {
 
 function get_work_tree_status {
   # Update the index
-  git update-index -q --ignore-submodules --refresh > /dev/null
+  git update-index -q --ignore-submodules --refresh >/dev/null
   eval "$1="
 
-  if ! git diff-files --quiet --ignore-submodules -- > /dev/null
-  then
+  if ! git diff-files --quiet --ignore-submodules -- >/dev/null; then
     eval "$1=unstaged"
   fi
 
-  if ! git diff-index --cached --quiet HEAD --ignore-submodules -- > /dev/null
-  then
+  if ! git diff-index --cached --quiet HEAD --ignore-submodules -- >/dev/null; then
     eval "$1=uncommitted"
   fi
 }
@@ -684,53 +683,53 @@ function init {
 }
 
 case $ACTION in
-  --help)
-    echo -e "$HELP"
-    ;;
-  --version)
-    echo -e "${PROG}: $PROG_VERSION"
-    ;;
-  final)
-    init
-    get_default_branch default_branch
-    diff=$(git diff $default_branch | cat)
-    if [ "$forcetag" == "false" ]; then
-      if [ -n "$diff" ]; then
-        echo "ERROR: Branch must be updated with $default_branch for final versions"
-        exit 1
-      fi
+--help)
+  echo -e "$HELP"
+  ;;
+--version)
+  echo -e "${PROG}: $PROG_VERSION"
+  ;;
+final)
+  init
+  get_default_branch default_branch
+  diff=$(git diff $default_branch | cat)
+  if [ "$forcetag" == "false" ]; then
+    if [ -n "$diff" ]; then
+      echo "ERROR: Branch must be updated with $default_branch for final versions"
+      exit 1
     fi
-    increase_version
-    ;;
-  alpha|beta)
-    init
-    identifier="$ACTION"
-    increase_version
-    ;;
-  candidate)
-    init
-    identifier="rc"
-    increase_version
-    ;;
-  getlast)
-    init
-    echo "$lastversion"
-    ;;
-  getfinal)
-    init
-    echo "$finalversion"
-    ;;
-  getcurrent)
-    init
-    get_current current
-    echo "$current"
-    ;;
-  get)
-    init
-    echo "Current final version: $finalversion"
-    echo "Last tagged version:   $lastversion"
-    ;;
-  *)
-    echo "'$ACTION' is not a valid command, see --help for available commands."
-    ;;
+  fi
+  increase_version
+  ;;
+alpha | beta)
+  init
+  identifier="$ACTION"
+  increase_version
+  ;;
+candidate)
+  init
+  identifier="rc"
+  increase_version
+  ;;
+getlast)
+  init
+  echo "$lastversion"
+  ;;
+getfinal)
+  init
+  echo "$finalversion"
+  ;;
+getcurrent)
+  init
+  get_current current
+  echo "$current"
+  ;;
+get)
+  init
+  echo "Current final version: $finalversion"
+  echo "Last tagged version:   $lastversion"
+  ;;
+*)
+  echo "'$ACTION' is not a valid command, see --help for available commands."
+  ;;
 esac
